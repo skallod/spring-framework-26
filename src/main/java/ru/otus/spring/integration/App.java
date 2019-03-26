@@ -13,8 +13,10 @@ import org.springframework.integration.channel.QueueChannel;
 import org.springframework.integration.config.EnableIntegration;
 import org.springframework.integration.dsl.IntegrationFlow;
 import org.springframework.integration.dsl.IntegrationFlows;
+import org.springframework.integration.dsl.Pollers;
 import org.springframework.integration.dsl.channel.DirectChannelSpec;
 import org.springframework.integration.dsl.channel.MessageChannels;
+import org.springframework.integration.scheduling.PollerMetadata;
 import ru.otus.spring.integration.domain.Food;
 import ru.otus.spring.integration.domain.OrderItem;
 
@@ -28,8 +30,8 @@ public class App {
     private static final String[] MENU = {"coffee", "tea", "smoothie", "whiskey", "beer", "cola", "water"};
 
     @Bean
-    public DirectChannel itemsChannel() {
-        return MessageChannels.direct().datatype(OrderItem.class).get();
+    public QueueChannel itemsChannel() {
+        return MessageChannels.queue(10).datatype(OrderItem.class).get();
     }
 
     @Bean
@@ -37,15 +39,18 @@ public class App {
         return MessageChannels.publishSubscribe().datatype(Food.class).get();
     }
 
-    // TODO: create default poller
+    @Bean (name = PollerMetadata.DEFAULT_POLLER )
+    public PollerMetadata poller () {
+        return Pollers.fixedRate(1000).get() ;
+    }
 
     @Bean
     public IntegrationFlow cafeFlow() {
         return IntegrationFlows.from("itemsChannel")
-                // TODO: cook OrderItem in the kitchen
+                .handle("kitchenService", "cook")
                 // TODO*: add router and subflows to process iced and usual items
                 // TODO*: add splitter and aggregator
-                // TODO: forward it to the publish subscriber channel
+                .channel("foodChannel")
                 .get();
     }
 
