@@ -6,9 +6,11 @@ import org.springframework.integration.annotation.MessagingGateway;
 import ru.otus.spring.integration.domain.Food;
 import ru.otus.spring.integration.domain.OrderItem;
 
+import java.util.Collection;
+
 @MessagingGateway
 public interface Cafe {
 
     @Gateway(requestChannel = "itemsChannel", replyChannel = "foodChannel")
-    Food process(OrderItem orderItem);
+    Collection<Food> process(Collection<OrderItem> orderItem);
 }

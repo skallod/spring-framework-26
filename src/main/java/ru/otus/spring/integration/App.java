@@ -20,6 +20,11 @@ import org.springframework.integration.scheduling.PollerMetadata;
 import ru.otus.spring.integration.domain.Food;
 import ru.otus.spring.integration.domain.OrderItem;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+import java.util.stream.Collectors;
+
 
 @IntegrationComponentScan
 @SuppressWarnings({"resource", "Duplicates", "InfiniteLoopStatement"})
@@ -31,25 +36,26 @@ public class App {
 
     @Bean
     public QueueChannel itemsChannel() {
-        return MessageChannels.queue(10).datatype(OrderItem.class).get();
+        return MessageChannels.queue(10).get();
     }
 
     @Bean
     public PublishSubscribeChannel foodChannel() {
-        return MessageChannels.publishSubscribe().datatype(Food.class).get();
+        return MessageChannels.publishSubscribe().get();
     }
 
     @Bean (name = PollerMetadata.DEFAULT_POLLER )
     public PollerMetadata poller () {
-        return Pollers.fixedRate(1000).get() ;
+        return Pollers.fixedRate(100).maxMessagesPerPoll(2).get() ;
     }
 
     @Bean
     public IntegrationFlow cafeFlow() {
         return IntegrationFlows.from("itemsChannel")
+                .split()
                 .handle("kitchenService", "cook")
                 // TODO*: add router and subflows to process iced and usual items
-                // TODO*: add splitter and aggregator
+                .aggregate()
                 .channel("foodChannel")
                 .get();
     }
@@ -63,14 +69,26 @@ public class App {
         while (true) {
             Thread.sleep(1000);
 
-            OrderItem orderItem = generateOrderItem();
-            System.out.println("New orderItem: " + orderItem.getItemName());
-            Food food = cafe.process(orderItem);
-            System.out.println("Ready food: " + food.getName());
+            Collection<OrderItem> items = generateOrderItems();
+            System.out.println("New orderItems: " +
+                    items.stream().map(OrderItem::getItemName)
+                            .collect(Collectors.joining(",")));
+            Collection<Food> food = cafe.process(items);
+            System.out.println("Ready food: " + food.stream()
+                    .map(Food::getName)
+                    .collect(Collectors.joining(",")));
         }
     }
 
     private static OrderItem generateOrderItem() {
         return new OrderItem(MENU[RandomUtils.nextInt(0, MENU.length)]);
+    }
+
+    private static Collection<OrderItem> generateOrderItems() {
+        List<OrderItem> items = new ArrayList<>();
+        for (int i = 0; i < RandomUtils.nextInt(1, 5); ++i) {
+            items.add(generateOrderItem());
+        }
+        return items;
     }
 }
