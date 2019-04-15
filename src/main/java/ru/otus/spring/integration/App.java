@@ -1,6 +1,7 @@
 package ru.otus.spring.integration;
 
 import org.apache.commons.lang3.RandomUtils;
+import org.apache.commons.logging.Log;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
@@ -19,6 +20,7 @@ import org.springframework.integration.dsl.channel.MessageChannels;
 import org.springframework.integration.scheduling.PollerMetadata;
 import ru.otus.spring.integration.domain.Food;
 import ru.otus.spring.integration.domain.OrderItem;
+import org.apache.commons.logging.LogFactory;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -32,6 +34,9 @@ import java.util.stream.Collectors;
 @Configuration
 @EnableIntegration
 public class App {
+
+    private static final Log log = LogFactory.getLog(App.class);
+
     private static final String[] MENU = {"coffee", "tea", "smoothie", "whiskey", "beer", "cola", "water"};
 
     @Bean
@@ -44,6 +49,16 @@ public class App {
         return MessageChannels.publishSubscribe().get();
     }
 
+    @Bean
+    public PublishSubscribeChannel icedChannel() {
+        return MessageChannels.publishSubscribe().get();
+    }
+
+    @Bean
+    public PublishSubscribeChannel notIcedChannel() {
+        return MessageChannels.publishSubscribe().get();
+    }
+
     @Bean (name = PollerMetadata.DEFAULT_POLLER )
     public PollerMetadata poller () {
         return Pollers.fixedRate(100).maxMessagesPerPoll(2).get() ;
@@ -53,8 +68,28 @@ public class App {
     public IntegrationFlow cafeFlow() {
         return IntegrationFlows.from("itemsChannel")
                 .split()
+                .log("galuzin test")
+                .<OrderItem,Boolean>route(item->item.isIced(),mapping
+                        ->mapping.subFlowMapping(true,sf->sf.channel("icedChannel"))
+                        .subFlowMapping(false,sf->sf.channel("notIcedChannel")))
+                .get();
+    }
+    @Bean
+    public IntegrationFlow notIcedFlow() {
+        return IntegrationFlows.from("notIcedChannel")
+                .split()
                 .handle("kitchenService", "cook")
-                // TODO*: add router and subflows to process iced and usual items
+                .log("galuzin2 test")
+                .aggregate()
+                .channel("foodChannel")
+                .get();
+    }
+    @Bean
+    public IntegrationFlow icedFlow() {
+        return IntegrationFlows.from("icedChannel")
+                .split()
+                .handle("kitchenService", "cookIced")
+                .log("galuzin3 test")
                 .aggregate()
                 .channel("foodChannel")
                 .get();
@@ -70,18 +105,19 @@ public class App {
             Thread.sleep(1000);
 
             Collection<OrderItem> items = generateOrderItems();
-            System.out.println("New orderItems: " +
+            log.info("New orderItems: " +
                     items.stream().map(OrderItem::getItemName)
                             .collect(Collectors.joining(",")));
             Collection<Food> food = cafe.process(items);
-            System.out.println("Ready food: " + food.stream()
+            log.info("Ready food: " + food.stream()
                     .map(Food::getName)
                     .collect(Collectors.joining(",")));
         }
     }
 
     private static OrderItem generateOrderItem() {
-        return new OrderItem(MENU[RandomUtils.nextInt(0, MENU.length)]);
+        int i = RandomUtils.nextInt(0, MENU.length);
+        return new OrderItem(MENU[i],i%2==0);
     }
 
     private static Collection<OrderItem> generateOrderItems() {
